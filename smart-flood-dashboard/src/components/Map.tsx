@@ -11,6 +11,8 @@ const mapContainerStyle = {
   height: '100%'
 };
 
+const LIBRARIES: ("places" | "geometry")[] = ["places", "geometry"];
+
 const defaultCenter = {
   lat: 13.7563,
   lng: 100.5018
@@ -55,7 +57,7 @@ export default function Map({ nodes, selectedNodeId, onNodeSelect }: MapProps) {
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "", 
-    libraries: ['places', 'geometry']
+    libraries: LIBRARIES
   });
 
   const [map, setMap] = useState<google.maps.Map | null>(null);
@@ -163,7 +165,8 @@ export default function Map({ nodes, selectedNodeId, onNodeSelect }: MapProps) {
       let worstNodeHit: CameraState | null = null;
       let worstIntersectPoint: google.maps.LatLng | null = null;
 
-      results.routes.forEach((route, index) => {
+      for (let i = 0; i < results.routes.length; i++) {
+        const route = results.routes[i];
         let intersections = 0;
         const path = route.overview_path;
         
@@ -183,9 +186,9 @@ export default function Map({ nodes, selectedNodeId, onNodeSelect }: MapProps) {
         
         if (intersections < minIntersections) {
           minIntersections = intersections;
-          bestRouteIndex = index;
+          bestRouteIndex = i;
         }
-      });
+      }
 
       // ถ้าเจอเส้นทางที่รอด (0 intersections) ใช้เส้นทางนั้นเลย
       if (minIntersections === 0) {

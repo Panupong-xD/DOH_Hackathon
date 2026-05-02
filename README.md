@@ -1,88 +1,122 @@
-# 🌊 Smart Flood AI Monitoring & Command Center
+# Smart Flood AI: Real-Time Monitoring & Command Center
 
-ระบบเฝ้าระวังและวิเคราะห์สถานการณ์น้ำท่วมอัจฉริยะด้วย AI (Grounding DINO) พร้อมระบบ Command Center สำหรับบริหารจัดการและแจ้งเตือนผ่าน LINE OA แบบ Real-time
+An intelligent flood surveillance and analysis system powered by Zero-Shot AI (Grounding DINO), featuring a professional Command Center for disaster management, flood-aware routing, and real-time alerts via LINE OA.
 
----
-
-## ✨ Key Features (ความสามารถหลัก)
-
-### 🧠 1. AI-Powered Depth Estimation
-- **Zero-Shot Detection**: ใช้โมเดล **Grounding DINO** ในการตรวจจับ "รถยนต์ (Car)" และ "ล้อ (Wheel)" ได้ทันทีโดยไม่ต้องเทรนโมเดลใหม่
-- **Wheel Submerged Analysis**: วิเคราะห์ระดับความลึกของน้ำจากอัตราส่วนการจมของล้อรถ เพื่อคำนวณความลึกเป็นเซนติเมตร (cm) อย่างแม่นยำ
-- **Real-time Overlay**: แสดงกรอบตรวจจับ (Bounding Box) และระดับน้ำบนภาพ CCTV แบบสดๆ
-
-### 🗺️ 2. Intelligent Command Dashboard
-- **Interactive Map**: แสดงตำแหน่งกล้อง CCTV ทั้งหมดบน Google Maps พร้อมสถานะสี (เขียว: ปกติ, เหลือง: เฝ้าระวัง, แดง: วิกฤต)
-- **Flood-Aware Routing**: ระบบนำทางอัจฉริยะที่ช่วย **คำนวณเส้นทางหลีกเลี่ยงพื้นที่น้ำท่วม** ในรัศมี 5 กม. จากจุดที่ยืนยันว่าวิกฤต
-- **Live Streaming**: ดูภาพสดจากกล้องทุกตัวผ่านหน้า Dashboard ด้วยสตรีมแบบ MJPEG ที่ประหยัดทรัพยากร
-
-### 📲 3. Advanced Alert System (LINE Integration)
-- **Manual Confirmation**: เจ้าหน้าที่สามารถตรวจสอบและ "ยืนยัน (Confirm)" สถานการณ์ก่อนส่งแจ้งเตือน เพื่อป้องกันความผิดพลาด (False Positive)
-- **LINE Flex Message Carousel**: ส่งแจ้งเตือนน้ำท่วมไปยังประชาชนผ่าน LINE OA ในรูปแบบการ์ดที่สวยงาม (Carousel) พร้อมภาพประกอบและระดับน้ำล่าสุด
-- **One-Click Broadcast**: ระบบกระจายข่าวสารไปยังผู้ติดตามทุกคนทันทีเมื่อเกิดเหตุวิกฤต
+![Next.js](https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
+![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
+![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
 
 ---
 
-## 🛠️ Tech Stack (เทคโนโลยีที่ใช้)
+## Key Features
 
-### Backend (AI & API)
-- **Python (FastAPI)**: ทำงานเป็น Core Backend สำหรับประมวลผล AI และให้บริการ API
-- **PyTorch & Transformers**: สำหรับรันโมเดล Grounding DINO (รองรับ CUDA สำหรับการ์ดจอ RTX)
-- **OpenCV**: สำหรับจัดการวิดีโอสตรีมและประมวลผลภาพ
-- **Python-dotenv**: สำหรับจัดการความปลอดภัยของ API Keys
+### 1. AI-Powered Depth Estimation
+- **Zero-Shot Detection**: Leverages **Grounding DINO** to detect "Cars" and "Wheels" instantly without any custom training or labeled datasets.
+- **Submerged Analysis**: Automatically calculates water depth in centimeters (cm) by analyzing the submersion ratio of vehicle wheels relative to their expected full size.
+- **Real-time Visualization**: Dynamic bounding boxes and depth metadata are overlaid on video captures for administrative verification.
 
-### Frontend (Dashboard)
-- **Next.js (App Router)**: Framework สำหรับสร้างเว็บแอปพลิเคชันที่รวดเร็วและทันสมัย
-- **Tailwind CSS**: สำหรับการออกแบบ UI ที่สวยงามแบบ Premium Dark Mode
-- **Google Maps API**: สำหรับระบบแผนที่และคำนวณเส้นทางนำทาง
-- **Lucide React**: สำหรับไอคอนประกอบที่ทันสมัย
+### 2. Intelligent Command Dashboard
+- **Interactive Geospatial Map**: Full Google Maps integration showing CCTV locations with live status indicators (Green: Normal, Yellow: Warning, Red: Critical).
+- **Flood-Aware Routing**: A smart navigation engine that automatically **calculates detour routes** to bypass flooded zones (within a 5km radius of critical alerts).
+- **High-Performance Streaming**: Resource-optimized MJPEG live streams ensuring smooth 30FPS monitoring across multiple concurrent camera feeds.
+
+### 3. Human-in-the-Loop Alert System
+- **Verification Workflow**: Officers can review AI detections and "Confirm" flood events before broadcasting, reducing false alarms.
+- **Rich Media Alerts**: Disseminates professional **LINE Flex Message Carousels** containing live site captures, precise water level data, and direct map links.
+- **Emergency Broadcast**: One-click rapid dissemination to all subscribers during emergency events.
 
 ---
 
-## 🚀 การติดตั้งและเริ่มใช้งาน
+## How It Works (AI Logic)
 
-### 1. เตรียม Environment
-สร้างไฟล์ `.env` ที่ root directory:
+1.  **Inference**: The system uses `Grounding DINO` with the prompt `"wheel. car."` to identify objects in each frame.
+2.  **Association**: Detected wheels are matched to their respective car bounding boxes based on spatial proximity.
+3.  **Depth Calculation**:
+    - The system identifies "valid" wheels (those at the bottom of the car).
+    - It calculates the ratio between the visible wheel height and its estimated full diameter.
+    - Water depth is derived using a standardized wheel height reference (approx. 60cm for standard vehicles).
+4.  **State Management**: Real-time updates are pushed to the frontend, which triggers UI changes (map pin colors, sidebar warnings).
+
+---
+
+## Tech Stack
+
+### Backend (AI Engine & API)
+*   **Python (FastAPI)**: High-performance core for AI inference and MJPEG streaming.
+*   **PyTorch & Transformers**: Powering the Grounding DINO model (supports CUDA/MPS/CPU).
+*   **OpenCV**: Advanced video handling, image processing, and MJPEG generation.
+*   **Uvicorn**: Lightning-fast ASGI server implementation.
+
+### Frontend (Command Center)
+*   **Next.js 15 (App Router)**: Modern React framework for seamless, server-side rendered performance.
+*   **Tailwind CSS**: Premium design system with dark-mode optimization and fluid transitions.
+*   **Google Maps API**: Advanced Geospatial services, Geocoding, and Directions API for smart routing.
+*   **Lucide React**: Vector-based iconography for a clean, modern aesthetic.
+
+---
+
+## Getting Started
+
+### 1. Prerequisites
+- Python 3.10+
+- Node.js 18+
+- A Google Maps API Key
+- A LINE Messaging API Channel Access Token
+
+### 2. Environment Configuration
+Create a `.env` file in the **root directory**:
 ```env
-LINE_OA_TOKEN=your_token_here
-LINE_OA_USER_ID=your_id_here
-PUBLIC_BASE_URL=http://localhost:8000
+LINE_OA_TOKEN=your_channel_access_token
+LINE_OA_USER_ID=your_target_user_id (optional, defaults to broadcast)
+PUBLIC_BASE_URL=your_public_url (e.g., via Cloudflare Tunnel)
 ```
 
-สร้างไฟล์ `smart-flood-dashboard/.env.local`:
+Create a `smart-flood-dashboard/.env.local` file:
 ```env
-NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your_google_maps_key
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your_google_maps_api_key
 ```
 
-### 2. รัน Backend (Python)
-```powershell
-# ติดตั้ง dependencies
+### 3. Backend Installation
+```bash
+# Install Python dependencies
 pip install -r requirements.txt
 
-# รัน Server
+# Start the AI Server (Runs on port 8000)
 python server.py
 ```
 
-### 3. รัน Frontend (Next.js)
-```powershell
+### 4. Frontend Installation
+```bash
 cd smart-flood-dashboard
 npm install
 npm run dev
 ```
+The dashboard will be available at [http://localhost:3000](http://localhost:3000).
 
 ---
 
-## 📂 โครงสร้างโปรเจกต์
-- `server.py`: ระบบประมวลผล AI และ API สตรีมมิ่ง
-- `smart-flood-dashboard/`: โค้ดหน้า Dashboard ทั้งหมด
-  - `src/components/Map.tsx`: ระบบแผนที่และการนำทาง
-  - `src/components/Sidebar.tsx`: รายการสถานะกล้องและการควบคุม
-  - `src/components/CCTVPopup.tsx`: หน้าต่างดูภาพสด AI
-- `captures/`: เก็บภาพ Alert สำหรับส่ง LINE
+## Project Structure
+
+```text
+├── server.py                # AI Heartbeat: Inference, Streaming, & Alerts
+├── requirements.txt         # Python dependencies
+├── captures/                # Storage for AI-annotated alert evidence
+├── smart-flood-dashboard/   # Next.js Frontend Application
+│   ├── src/components/
+│   │   ├── Map.tsx          # Geospatial logic & Smart Routing
+│   │   ├── Sidebar.tsx      # Camera fleet management & controls
+│   │   └── CCTVPopup.tsx    # Live AI Vision interface
+│   └── .env.local           # Frontend environment config
+└── Dataset/                 # Local video samples for simulation
+```
 
 ---
 
-## 👥 ผู้พัฒนา
-**Panupong-xD** & **Kulachart**
+## Development Team
+*   **Panupong-xD**
+*   **Kulachart**
 
 ---
+*Developed for the DOH Hackathon - Bridging AI and Disaster Management.*

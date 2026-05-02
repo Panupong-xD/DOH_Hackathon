@@ -17,13 +17,6 @@ export default function CCTVPopup({ node }: CCTVPopupProps) {
     setMounted(true);
   }, []);
 
-  const getStatusColorHex = (status: string) => {
-    switch (status) {
-      case 'critical': return '#ef4444';
-      case 'warning': return '#eab308';
-      default: return '#22c55e';
-    }
-  };
 
   const getBaseUrl = () => {
     if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
@@ -78,7 +71,7 @@ export default function CCTVPopup({ node }: CCTVPopupProps) {
             <div className="text-right">
               <div className="text-[10px] text-neutral-500 uppercase tracking-wider mb-1">AI ตรวจพบ</div>
               <div className="flex gap-1 justify-end">
-                {node.detected_objects.includes('car') && <Car size={14} className="text-blue-400" title="Car" />}
+                {node.detected_objects.includes('car') && <Car size={14} className="text-blue-400" />}
                 {node.detected_objects.includes('wheel') && <div className="w-3 h-3 rounded-full border-2 border-green-400" title="Wheel" />}
                 {node.detected_objects.length === 0 && <span className="text-xs text-neutral-500">-</span>}
               </div>
