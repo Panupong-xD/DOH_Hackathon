@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+
+# Mac
+.DS_Store
+
+# Project specific
+captures/
+dataset/
+node_modules/
+.next/
+.env*.local
