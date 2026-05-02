@@ -1,10 +1,24 @@
-.venv/
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+
+# Mac
+.DS_Store
+
+# Large Files & Media
 *.mp4
 *.jpg
 *.png
-.DS_Store
-smart-flood-dashboard/node_modules/
-smart-flood-dashboard/.next/
+
+# Project specific
+captures/
+dataset/
+node_modules/
+.next/
 .env*
 !.env.example

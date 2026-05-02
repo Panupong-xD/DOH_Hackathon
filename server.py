@@ -189,9 +189,15 @@ app.add_middleware(
 )
 
 MOCK_CAMERAS = [
+<<<<<<< HEAD
     {"camera_id": "CCTV-01", "name": "ถนนรัชดาภิเษก", "location": {"lat": 13.7934, "lng": 100.5741}, "video": "sample1.mp4"},
     {"camera_id": "CCTV-02", "name": "แยกลาดพร้าว", "location": {"lat": 13.8062, "lng": 100.5615}, "video": "sample2.mp4"},
     {"camera_id": "CCTV-03", "name": "สุขุมวิท 71", "location": {"lat": 13.7226, "lng": 100.5960}, "video": "sample1.mp4"},
+=======
+    {"camera_id": "CCTV-01", "name": "ถนนรัชดาภิเษก", "location": {"lat": 13.7934, "lng": 100.5741}, "video": "Dataset/sample1.mp4"},
+    {"camera_id": "CCTV-02", "name": "แยกลาดพร้าว", "location": {"lat": 13.8062, "lng": 100.5615}, "video": "Dataset/sample2.mp4"},
+    {"camera_id": "CCTV-03", "name": "สุขุมวิท 71", "location": {"lat": 13.7226, "lng": 100.5960}, "video": "Dataset/sample3.mp4"},
+>>>>>>> a63c286cc85706021df1c18679f509595d832d39
 ]
 
 # เก็บสถานะและเฟรมล่าสุดของแต่ละกล้อง
