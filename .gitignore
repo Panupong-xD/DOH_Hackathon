@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.mp4
+*.jpg
+*.png
+.DS_Store
+smart-flood-dashboard/node_modules/
+smart-flood-dashboard/.next/
+.env*
+!.env.example
