@@ -239,6 +239,11 @@ def video_reader_thread(camera: dict):
             depth_cm = camera_states[cam_id].get("water_depth", 0.0)
             status = camera_states[cam_id].get("status", "normal")
                 
+        # ย่อขนาดภาพสำหรับ Preview เพื่อไม่ให้กินแบนด์วิดท์มากเกินไปจนโหลดไม่ขึ้น
+        h, w = frame.shape[:2]
+        if w > 640:
+            frame = cv2.resize(frame, (640, int(h * (640 / w))))
+            
         # แปะแค่ text ระดับน้ำมุมซ้ายบน
         color = (0, 255, 0)
         if status == "critical": color = (0, 0, 255)
@@ -277,7 +282,7 @@ def ai_processor_thread(camera: dict):
         small_frame = cv2.resize(frame, (process_width, int(h * scale)))
         image_pil = Image.fromarray(cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB))
         
-        text_prompt = "wheel. car."
+        text_prompt = "wheel. car. water."
         inputs = processor(images=image_pil, text=text_prompt, return_tensors="pt").to(device)
         
         with ai_lock:
@@ -298,6 +303,8 @@ def ai_processor_thread(camera: dict):
         
         cars = []
         wheels = []
+        has_water = False
+        
         for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
             bx = [int(i) for i in box.tolist()]
             if label not in detected: detected.append(label)
@@ -308,6 +315,10 @@ def ai_processor_thread(camera: dict):
                 cv2.putText(alert_frame, "Car", (bx[0], bx[1]-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
             elif label == "wheel":
                 wheels.append(bx)
+            elif label == "water":
+                has_water = True
+                cv2.rectangle(alert_frame, (bx[0], bx[1]), (bx[2], bx[3]), (255, 165, 0), 2) # Orange for water box
+                cv2.putText(alert_frame, "Water", (bx[0], bx[1]-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 165, 0), 2)
         
         max_depth = 0.0
         car_to_wheels = {i: [] for i in range(len(cars))}
@@ -361,14 +372,15 @@ def ai_processor_thread(camera: dict):
                 wheel_width = wbx[2] - wbx[0]
                 full_wheel = max(wheel_width, wheel_height)
                 depth = 0.0
-                if full_wheel > 0:
+                if full_wheel > 0 and has_water:
                     submerged_ratio = (full_wheel - wheel_height) / full_wheel
-                    if submerged_ratio > 0.05:
+                    if submerged_ratio > 0.15: # เพิ่มเกณฑ์จาก 5% เป็น 15% เพื่อลด false positive จากกล่องที่ไม่แม่นยำ
                         depth = 60 * submerged_ratio
                         max_depth = max(max_depth, depth)
                 
                 cv2.rectangle(alert_frame, (wbx[0], wbx[1]), (wbx[2], wbx[3]), (0, 255, 0), 2)
-                cv2.putText(alert_frame, f"{depth:.1f} cm", (wbx[0], wbx[1]-5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                if depth > 0:
+                    cv2.putText(alert_frame, f"{depth:.1f} cm", (wbx[0], wbx[1]-5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
                 if len(valid_wheels) < 2:
                     cv2.line(alert_frame, (wbx[0] - 15, wbx[3]), (wbx[2] + 15, wbx[3]), (255, 255, 0), 2)
                     
@@ -378,15 +390,20 @@ def ai_processor_thread(camera: dict):
             wheel_width = wbx[2] - wbx[0]
             full_wheel = max(wheel_width, wheel_height)
             depth = 0.0
-            if full_wheel > 0:
+            if full_wheel > 0 and has_water:
                 submerged_ratio = (full_wheel - wheel_height) / full_wheel
-                if submerged_ratio > 0.05:
+                if submerged_ratio > 0.15: # เพิ่มเกณฑ์เป็น 15% 
                     depth = 60 * submerged_ratio
                     max_depth = max(max_depth, depth)
             
             cv2.rectangle(alert_frame, (wbx[0], wbx[1]), (wbx[2], wbx[3]), (0, 255, 0), 2)
-            cv2.putText(alert_frame, f"{depth:.1f} cm", (wbx[0], wbx[1]-5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+            if depth > 0:
+                cv2.putText(alert_frame, f"{depth:.1f} cm", (wbx[0], wbx[1]-5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
             cv2.line(alert_frame, (wbx[0] - 15, wbx[3]), (wbx[2] + 15, wbx[3]), (255, 255, 0), 2)
+
+        # ป้องกัน False Positive: ถ้า AI ตรวจไม่พบน้ำในภาพเลย ให้ถือว่าความลึกน้ำเป็น 0
+        if not has_water:
+            max_depth = 0.0
 
         status = "normal"
         if max_depth >= 30: status = "critical"
@@ -420,7 +437,7 @@ def ai_processor_thread(camera: dict):
         for _ in range(30 // 2): # ข้าม 0.5 วินาที
             cap.grab()
             
-        time.sleep(1) # พักก่อนสแกนใหม่ แป๊บเดียวพอเพราะการ์ดจอไหว
+        time.sleep(10) # พักก่อนสแกนใหม่ แป๊บเดียวพอเพราะการ์ดจอไหว
 
 @app.on_event("startup")
 def startup_event():
@@ -432,17 +449,17 @@ def startup_event():
         t_reader.start()
         t_ai.start()
 
-def video_stream_generator(camera_id: str):
+async def video_stream_generator(camera_id: str):
     """ฟังก์ชันผลิตสตรีม MJPEG"""
     while True:
         frame_bytes = camera_frames.get(camera_id)
         if frame_bytes:
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-        time.sleep(0.03) # ~30fps
+        await asyncio.sleep(0.03) # ~30fps
 
 @app.get("/api/video/{camera_id}")
-def video_feed(camera_id: str):
+async def video_feed(camera_id: str):
     """ส่งออกแบบ MJPEG ให้แท็ก <img> เล่นเป็นวิดีโอได้เลย"""
     return StreamingResponse(video_stream_generator(camera_id), 
                              media_type="multipart/x-mixed-replace; boundary=frame")

@@ -6,15 +6,54 @@
 }
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+  --background: #020617; /* Slate 950 */
+  --foreground: #f8fafc; /* Slate 50 */
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
   overflow: hidden; /* Prevent scrolling for the dashboard feel */
+  background-image: 
+    radial-gradient(circle at 15% 50%, rgba(30, 58, 138, 0.2), transparent 25%),
+    radial-gradient(circle at 85% 30%, rgba(15, 118, 110, 0.15), transparent 25%);
+}
+
+.glass-panel {
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 40px 0 rgba(0, 0, 0, 0.5);
+}
+
+.glass-card {
+  background: rgba(30, 41, 59, 0.5); /* Slate 800 with opacity */
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.3s ease;
+}
+
+.glass-card:hover {
+  background: rgba(51, 65, 85, 0.7); /* Slate 700 with opacity */
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+}
+
+.glass-card.selected {
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+}
+
+.glowing-text-red {
+  text-shadow: 0 0 12px rgba(239, 68, 68, 0.8);
+}
+.glowing-text-blue {
+  text-shadow: 0 0 12px rgba(59, 130, 246, 0.8);
 }
 
 /* Map marker pulsing animation */
@@ -26,4 +65,25 @@ body {
 
 .pulse-red {
   animation: pulse-red 2s infinite;
+}
+
+/* Google Maps InfoWindow Custom Styling - Removes the white bubble wrapper */
+.gm-style .gm-style-iw-c {
+  background-color: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+
+.gm-style .gm-style-iw-tc {
+  display: none !important; /* Hide the default pointer triangle */
+}
+
+.gm-style .gm-style-iw-d {
+  overflow: visible !important;
+  padding: 0 !important;
+}
+
+.gm-style .gm-ui-hover-effect {
+  display: none !important; /* Hide default close button since we have our own */
 }

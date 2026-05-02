@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow, DirectionsRenderer, Circle, Autocomplete } from '@react-google-maps/api';
 import { CameraState } from '@/types';
 import CCTVPopup from './CCTVPopup';
-import { Navigation, AlertTriangle } from 'lucide-react';
+import { Navigation, AlertTriangle, X } from 'lucide-react';
 
 const mapContainerStyle = {
   width: '100%',
@@ -66,6 +66,7 @@ export default function Map({ nodes, selectedNodeId, onNodeSelect }: MapProps) {
   const [routeMessage, setRouteMessage] = useState<{type: 'error'|'success'|'warning', text: string} | null>(null);
   const [currentWaypoint, setCurrentWaypoint] = useState<google.maps.LatLng | null>(null);
   const [pickingMode, setPickingMode] = useState<'origin' | 'dest' | null>(null);
+  const [isNavOpen, setIsNavOpen] = useState(false);
   
   const originRef = useRef<HTMLInputElement>(null);
   const destRef = useRef<HTMLInputElement>(null);
@@ -162,8 +163,6 @@ export default function Map({ nodes, selectedNodeId, onNodeSelect }: MapProps) {
       // เช็คว่ามีเส้นทางไหนที่รอดจากการผ่านวงกลมบ้างไหม
       let bestRouteIndex = -1;
       let minIntersections = Infinity;
-      let worstNodeHit: CameraState | null = null;
-      let worstIntersectPoint: google.maps.LatLng | null = null;
 
       for (let i = 0; i < results.routes.length; i++) {
         const route = results.routes[i];
@@ -178,8 +177,6 @@ export default function Map({ nodes, selectedNodeId, onNodeSelect }: MapProps) {
             );
             if (distance < DANGER_RADIUS) {
               intersections++;
-              worstNodeHit = node;
-              worstIntersectPoint = point;
             }
           }
         }
@@ -196,34 +193,114 @@ export default function Map({ nodes, selectedNodeId, onNodeSelect }: MapProps) {
         setRouteMessage({type: 'success', text: 'พบเส้นทางที่ปลอดภัยจากน้ำท่วม'});
       } 
       // ถ้าเส้นทางเดิมติดน้ำท่วมทั้งหมด ให้คำนวณหา Waypoint เพื่อตีอ้อม (Detour)
-      else if (worstNodeHit && worstIntersectPoint) {
+      else {
         setRouteMessage({type: 'warning', text: 'กำลังคำนวณเส้นทางอ้อมพิเศษ (Detour)...'});
         
-        const nodeLatLng = new window.google.maps.LatLng(worstNodeHit.location.lat, worstNodeHit.location.lng);
-        // หามุมองศาจากศูนย์กลางน้ำท่วมไปยังจุดที่ตัดผ่าน
-        const heading = window.google.maps.geometry.spherical.computeHeading(nodeLatLng, worstIntersectPoint);
-        // สร้างจุด Waypoint ใหม่ ให้ออกห่างจากศูนย์กลางไป 5.5 กม. ในทิศทางนั้น
-        const detourPoint = window.google.maps.geometry.spherical.computeOffset(nodeLatLng, DANGER_RADIUS + 500, heading);
+        const path = results.routes[bestRouteIndex].overview_path;
+        let detourPoints: { location: google.maps.LatLng, stopover: boolean }[] = [];
         
-        const detourRequest: google.maps.DirectionsRequest = {
-          origin: originRef.current.value,
-          destination: destRef.current.value,
-          waypoints: [{ location: detourPoint, stopover: false }],
-          travelMode: window.google.maps.TravelMode.DRIVING,
-        };
-        
-        try {
-          const detourResults = await directionsService.route(detourRequest);
-          setDirectionsResponse(detourResults);
-          setCurrentWaypoint(detourPoint);
-          setRouteMessage({type: 'success', text: 'สร้างเส้นทางอ้อมหลีกเลี่ยงพื้นที่น้ำท่วม 5 กม. สำเร็จ'});
-        } catch (err) {
-          console.error("Detour failed", err);
-          setDirectionsResponse({ ...results, routeIndex: bestRouteIndex } as any);
-          setRouteMessage({type: 'error', text: 'คำเตือน: ไม่สามารถหาเส้นทางอ้อมได้ทั้งหมด (รัศมีใหญ่เกินไปหรือเป็นจุดสิ้นสุด)'});
+        // Find all nodes that are intersected by this best route
+        const hitNodes = confirmedNodes.filter(node => {
+          const nodeLatLng = new window.google.maps.LatLng(node.location.lat, node.location.lng);
+          return path.some(p => window.google.maps.geometry.spherical.computeDistanceBetween(p, nodeLatLng) < DANGER_RADIUS);
+        });
+
+        for (const node of hitNodes) {
+          const nodeLatLng = new window.google.maps.LatLng(node.location.lat, node.location.lng);
+          let entryPoint: google.maps.LatLng | null = null;
+          let exitPoint: google.maps.LatLng | null = null;
+          
+          for (const point of path) {
+            if (window.google.maps.geometry.spherical.computeDistanceBetween(point, nodeLatLng) < DANGER_RADIUS) {
+              if (!entryPoint) entryPoint = point;
+              exitPoint = point;
+            }
+          }
+          
+          if (entryPoint && exitPoint) {
+            // คำนวณทิศทางของเส้นทางที่วิ่งผ่านจุดน้ำท่วม
+            const routeHeading = window.google.maps.geometry.spherical.computeHeading(entryPoint, exitPoint);
+            
+            // ผลักจุด Waypoint ออกไปด้านข้าง (ตั้งฉากกับเส้นทาง) ให้อยู่นอกรัศมีน้ำท่วมอย่างปลอดภัย
+            // รัศมี 5km -> ผลักออกไป 8.5km จากศูนย์กลางน้ำท่วม เพื่อให้ถนนรอบนอกไม่เฉียดเข้าไป
+            const detourRadius = DANGER_RADIUS + 3500; 
+            
+            const detour1 = window.google.maps.geometry.spherical.computeOffset(nodeLatLng, detourRadius, routeHeading + 90);
+            const detour2 = window.google.maps.geometry.spherical.computeOffset(nodeLatLng, detourRadius, routeHeading - 90);
+            
+            const originLatLng = path[0];
+            const destLatLng = path[path.length - 1];
+            
+            // เลือกจุดเลี้ยวที่ทำให้ระยะทางรวมสั้นกว่า
+            const dist1 = window.google.maps.geometry.spherical.computeDistanceBetween(originLatLng, detour1) + 
+                          window.google.maps.geometry.spherical.computeDistanceBetween(detour1, destLatLng);
+            const dist2 = window.google.maps.geometry.spherical.computeDistanceBetween(originLatLng, detour2) + 
+                          window.google.maps.geometry.spherical.computeDistanceBetween(detour2, destLatLng);
+            
+            const selectedDetour = dist1 < dist2 ? detour1 : detour2;
+            detourPoints.push({ location: selectedDetour, stopover: false });
+          }
         }
-      } else {
-        setDirectionsResponse({ ...results, routeIndex: 0 } as any);
+        
+        if (detourPoints.length > 0) {
+          // เรียงลำดับ Waypoint ตามระยะทางจากจุดเริ่มต้น เพื่อป้องกันการวิ่งวนไปมา
+          const originLatLng = path[0];
+          detourPoints.sort((a, b) => {
+            const distA = window.google.maps.geometry.spherical.computeDistanceBetween(originLatLng, a.location);
+            const distB = window.google.maps.geometry.spherical.computeDistanceBetween(originLatLng, b.location);
+            return distA - distB;
+          });
+
+          // จำกัด Waypoints ไม่เกิน 5 จุด เพื่อป้องกันข้อจำกัดของ API
+          const finalWaypoints = detourPoints.slice(0, 5);
+          
+          const detourRequest: google.maps.DirectionsRequest = {
+            origin: originRef.current.value,
+            destination: destRef.current.value,
+            waypoints: finalWaypoints,
+            travelMode: window.google.maps.TravelMode.DRIVING,
+            provideRouteAlternatives: true
+          };
+          
+          try {
+            const detourResults = await directionsService.route(detourRequest);
+            
+            // ประเมินผลลัพธ์เส้นทางอ้อม ว่ารอดน้ำท่วมจริงไหม
+            let bestDetourIndex = 0;
+            let minDetourIntersections = Infinity;
+            
+            for (let i = 0; i < detourResults.routes.length; i++) {
+              let ints = 0;
+              for (const p of detourResults.routes[i].overview_path) {
+                for (const n of confirmedNodes) {
+                  if (window.google.maps.geometry.spherical.computeDistanceBetween(p, new window.google.maps.LatLng(n.location.lat, n.location.lng)) < DANGER_RADIUS) {
+                    ints++;
+                  }
+                }
+              }
+              if (ints < minDetourIntersections) {
+                minDetourIntersections = ints;
+                bestDetourIndex = i;
+              }
+            }
+            
+            setDirectionsResponse({ ...detourResults, routeIndex: bestDetourIndex } as any);
+            setCurrentWaypoint(finalWaypoints[0].location); // For deep link fallback
+            
+            if (minDetourIntersections === 0) {
+              setRouteMessage({type: 'success', text: 'สร้างเส้นทางอ้อมหลีกเลี่ยงพื้นที่น้ำท่วมสำเร็จ'});
+            } else {
+              setRouteMessage({type: 'warning', text: `เลี่ยงได้บางส่วน (ยังต้องขับผ่านพื้นที่เฝ้าระวัง)`});
+            }
+          } catch (err) {
+            console.error("Detour failed", err);
+            setDirectionsResponse({ ...results, routeIndex: bestRouteIndex } as any);
+            setRouteMessage({type: 'error', text: 'ไม่สามารถหาเส้นทางอ้อมที่สมบูรณ์ได้ (แสดงเส้นทางเดิมที่ดีที่สุด)'});
+          }
+        } else {
+          setDirectionsResponse({ ...results, routeIndex: bestRouteIndex } as any);
+          setRouteMessage({type: 'error', text: 'ไม่สามารถคำนวณจุดหลีกเลี่ยงได้'});
+        }
       }
       
     } catch (error) {
@@ -260,97 +337,119 @@ export default function Map({ nodes, selectedNodeId, onNodeSelect }: MapProps) {
 
   return (
     <div className="relative w-full h-full">
-      <div className="absolute top-4 left-4 z-10 w-[420px] bg-neutral-900/95 backdrop-blur-md p-4 rounded-lg shadow-2xl border border-neutral-700">
-        <h2 className="text-white font-bold mb-3 flex items-center gap-2">
-          <Navigation size={18} className="text-blue-400" />
-          ระบบนำทางอัจฉริยะ (หลีกเลี่ยงน้ำท่วม 5 กม.)
-        </h2>
-        {pickingMode && (
-          <div className="mb-2 text-xs bg-blue-900/50 text-blue-300 p-2 rounded flex items-center gap-2 animate-pulse border border-blue-800">
-             📍 โปรดคลิกจุดบนแผนที่เพื่อเลือก {pickingMode === 'origin' ? 'จุดเริ่มต้น' : 'จุดหมายปลายทาง'}
-          </div>
-        )}
-        <form onSubmit={calculateRoute} className="flex flex-col gap-3">
-          <div className="flex gap-2 items-center">
-            <div className="flex-1">
-              <Autocomplete>
-                <input 
-                  type="text" 
-                  placeholder="จุดเริ่มต้น (Origin)" 
-                  ref={originRef}
-                  className={`w-full bg-neutral-800 border ${pickingMode === 'origin' ? 'border-blue-500' : 'border-neutral-700'} text-white px-3 py-2.5 rounded text-sm focus:outline-none focus:border-blue-500`}
-                />
-              </Autocomplete>
-            </div>
+      {!isNavOpen && (
+        <button 
+          onClick={() => setIsNavOpen(true)}
+          className="absolute top-5 left-5 z-10 glass-card bg-blue-600/80 hover:bg-blue-500/90 text-white p-3.5 rounded-full shadow-[0_0_20px_rgba(37,99,235,0.3)] flex items-center gap-2.5 transition-all border border-blue-400/30 hover:scale-105 backdrop-blur-md"
+          title="เปิดระบบนำทางอัจฉริยะ"
+        >
+          <Navigation size={22} className="text-white" />
+          <span className="font-bold pr-2 text-sm tracking-wide">ระบบนำทางอัจฉริยะ</span>
+        </button>
+      )}
+
+      {isNavOpen && (
+        <div className="absolute top-5 left-5 z-10 w-[420px] glass-panel p-5 rounded-2xl shadow-2xl border border-white/10">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-white font-bold flex items-center gap-2.5 text-lg">
+              <Navigation size={20} className="text-blue-400" />
+              ระบบนำทางอัจฉริยะ <span className="text-xs font-normal text-slate-400 bg-slate-800/50 px-2 py-0.5 rounded border border-white/5 ml-1">Safe Route</span>
+            </h2>
             <button 
-              type="button" 
-              onClick={() => setPickingMode(pickingMode === 'origin' ? null : 'origin')}
-              className={`p-2.5 rounded border transition-colors ${pickingMode === 'origin' ? 'bg-blue-600 border-blue-500 text-white' : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-white'}`}
-              title="คลิกเลือกบนแผนที่"
+              onClick={() => setIsNavOpen(false)}
+              className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-red-500/20 hover:text-red-400 transition-colors border border-transparent hover:border-red-500/30"
+              title="ปิด"
             >
-              📍
+              <X size={20} />
             </button>
           </div>
-          
-          <div className="flex gap-2 items-center">
-            <div className="flex-1">
-              <Autocomplete>
-                <input 
-                  type="text" 
-                  placeholder="จุดหมายปลายทาง (Destination)" 
-                  ref={destRef}
-                  className={`w-full bg-neutral-800 border ${pickingMode === 'dest' ? 'border-blue-500' : 'border-neutral-700'} text-white px-3 py-2.5 rounded text-sm focus:outline-none focus:border-blue-500`}
-                />
-              </Autocomplete>
-            </div>
-            <button 
-              type="button" 
-              onClick={() => setPickingMode(pickingMode === 'dest' ? null : 'dest')}
-              className={`p-2.5 rounded border transition-colors ${pickingMode === 'dest' ? 'bg-blue-600 border-blue-500 text-white' : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-white'}`}
-              title="คลิกเลือกบนแผนที่"
-            >
-              📍
-            </button>
-          </div>
-          
-          {routeMessage && (
-            <div className={`text-xs flex items-center gap-1.5 p-2 rounded border ${
-              routeMessage.type === 'error' ? 'bg-red-900/20 text-red-400 border-red-900/50' : 
-              routeMessage.type === 'warning' ? 'bg-yellow-900/20 text-yellow-400 border-yellow-900/50' :
-              'bg-green-900/20 text-green-400 border-green-900/50'
-            }`}>
-              <AlertTriangle size={14} /> {routeMessage.text}
+          {pickingMode && (
+            <div className="mb-3 text-xs bg-blue-500/10 text-blue-300 p-2.5 rounded-lg flex items-center gap-2 animate-pulse border border-blue-500/30 shadow-inner">
+               📍 โปรดคลิกจุดบนแผนที่เพื่อเลือก <span className="font-bold">{pickingMode === 'origin' ? 'จุดเริ่มต้น' : 'จุดหมายปลายทาง'}</span>
             </div>
           )}
-
-          <button 
-            type="submit" 
-            disabled={isRouting}
-            className="mt-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded text-sm font-bold disabled:opacity-50 transition-colors shadow-lg"
-          >
-            {isRouting ? 'กำลังคำนวณ...' : 'ค้นหาเส้นทางปลอดภัย'}
-          </button>
-        </form>
-        
-        {directionsResponse && (
-          <div className="mt-4 pt-3 border-t border-neutral-700 flex justify-between items-center">
-            <button 
-              onClick={clearRoute}
-              className="text-neutral-400 hover:text-white text-xs"
-            >
-              ล้างเส้นทาง
+          <form onSubmit={calculateRoute} className="flex flex-col gap-3.5">
+            <div className="flex gap-2 items-center">
+              <div className="flex-1">
+                <Autocomplete>
+                  <input 
+                    type="text" 
+                    placeholder="จุดเริ่มต้น (Origin)" 
+                    ref={originRef}
+                    className={`w-full bg-slate-900/50 border ${pickingMode === 'origin' ? 'border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.3)]' : 'border-white/10'} text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-blue-400 transition-all placeholder:text-slate-500`}
+                  />
+                </Autocomplete>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setPickingMode(pickingMode === 'origin' ? null : 'origin')}
+                className={`p-3 rounded-xl border transition-all ${pickingMode === 'origin' ? 'bg-blue-600/80 border-blue-400 text-white shadow-lg' : 'bg-slate-800/50 border-white/10 text-slate-400 hover:text-white hover:bg-slate-700/50'}`}
+                title="คลิกเลือกบนแผนที่"
+              >
+                📍
+              </button>
+            </div>
+            
+            <div className="flex gap-2 items-center">
+              <div className="flex-1">
+                <Autocomplete>
+                  <input 
+                    type="text" 
+                    placeholder="จุดหมายปลายทาง (Destination)" 
+                    ref={destRef}
+                    className={`w-full bg-slate-900/50 border ${pickingMode === 'dest' ? 'border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.3)]' : 'border-white/10'} text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-blue-400 transition-all placeholder:text-slate-500`}
+                  />
+                </Autocomplete>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setPickingMode(pickingMode === 'dest' ? null : 'dest')}
+                className={`p-3 rounded-xl border transition-all ${pickingMode === 'dest' ? 'bg-blue-600/80 border-blue-400 text-white shadow-lg' : 'bg-slate-800/50 border-white/10 text-slate-400 hover:text-white hover:bg-slate-700/50'}`}
+                title="คลิกเลือกบนแผนที่"
+              >
+              📍
             </button>
-            <a 
-              href={getDeepLink()}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs font-bold transition-colors shadow-lg shadow-green-900/50"
-            >
-              <Navigation size={14} /> นำทางในแอป Maps
-            </a>
           </div>
-        )}
-      </div>
+          
+            {routeMessage && (
+              <div className={`text-xs flex items-center gap-2 p-3 rounded-lg border shadow-inner font-medium ${
+                routeMessage.type === 'error' ? 'bg-red-500/10 text-red-400 border-red-500/30' : 
+                routeMessage.type === 'warning' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30' :
+                'bg-green-500/10 text-green-400 border-green-500/30'
+              }`}>
+                <AlertTriangle size={16} /> {routeMessage.text}
+              </div>
+            )}
+
+            <button 
+              type="submit" 
+              disabled={isRouting}
+              className="mt-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-4 py-3.5 rounded-xl text-sm font-bold disabled:opacity-50 transition-all shadow-[0_0_15px_rgba(79,70,229,0.3)] active:scale-[0.98] border border-blue-400/30 tracking-wide"
+            >
+              {isRouting ? 'กำลังคำนวณเส้นทาง...' : 'ค้นหาเส้นทางปลอดภัย'}
+            </button>
+          </form>
+          
+          {directionsResponse && (
+            <div className="mt-5 pt-4 border-t border-white/5 flex justify-between items-center bg-slate-900/30 -mx-5 -mb-5 p-5 rounded-b-2xl">
+              <button 
+                onClick={clearRoute}
+                className="text-slate-400 hover:text-red-400 text-xs font-bold uppercase tracking-wider transition-colors px-2 py-1 rounded hover:bg-red-500/10"
+              >
+                ล้างเส้นทาง
+              </button>
+              <a 
+                href={getDeepLink()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all border border-white/10 hover:border-white/20 shadow-lg"
+              >
+                <Navigation size={14} className="text-blue-400" /> นำทางในแอป Maps
+              </a>
+            </div>
+          )}
+        </div>
+      )}
 
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
@@ -391,11 +490,11 @@ export default function Map({ nodes, selectedNodeId, onNodeSelect }: MapProps) {
             position={selectedNode.location}
             onCloseClick={() => onNodeSelect(null)}
             options={{
-              pixelOffset: new window.google.maps.Size(0, -10),
+              pixelOffset: new window.google.maps.Size(0, -20),
               disableAutoPan: false,
             }}
           >
-            <CCTVPopup node={selectedNode} />
+            <CCTVPopup node={selectedNode} onClose={() => onNodeSelect(null)} />
           </InfoWindow>
         )}
 

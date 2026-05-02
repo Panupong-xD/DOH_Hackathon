@@ -12,7 +12,7 @@ interface SidebarProps {
 
 export default function Sidebar({ nodes, onNodeClick, selectedNodeId }: SidebarProps) {
   const [isBroadcasting, setIsBroadcasting] = useState(false);
-  
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'critical': return 'text-red-500 bg-red-500/10 border-red-500/30';
@@ -37,20 +37,19 @@ export default function Sidebar({ nodes, onNodeClick, selectedNodeId }: SidebarP
     if (!hasConfirmedFloods) return;
     setIsBroadcasting(true);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL 
-        || ((typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
-            ? 'http://127.0.0.1:8000'
-            : 'http://127.0.0.1:8000');
+      const baseUrl = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
+        ? 'http://127.0.0.1:8000'
+        : process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000';
 
       // ดึง ID ของกล้องที่กดยืนยันแล้ว
       const confirmedIds = nodes.filter(n => n.is_confirmed_critical).map(n => n.camera_id);
 
-      const res = await fetch(`${baseUrl}/api/broadcast_all`, { 
+      const res = await fetch(`${baseUrl}/api/broadcast_all`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(confirmedIds)
       }).catch(() => null);
-      
+
       if (res && res.ok) {
         alert('ส่งประกาศเตือนภัยพร้อมรูปภาพยืนยัน สำเร็จ!');
       } else {
@@ -63,69 +62,72 @@ export default function Sidebar({ nodes, onNodeClick, selectedNodeId }: SidebarP
   };
 
   return (
-    <div className="w-80 h-full bg-neutral-900 border-r border-neutral-800 flex flex-col text-neutral-200 shadow-xl z-10">
-      <div className="p-5 border-b border-neutral-800">
-        <h1 className="text-xl font-bold tracking-wider text-white flex items-center gap-2">
-          <AlertTriangle className="text-blue-500" />
-          ระบบแจ้งเตือนน้ำท่วมอัจฉริยะ
+    <div className="w-80 h-full glass-panel flex flex-col text-slate-200 shadow-2xl z-10 border-r border-white/5">
+      <div className="p-6 border-b border-white/5 bg-gradient-to-b from-blue-500/10 to-transparent">
+        <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-3">
+          <div className="p-2 bg-blue-500/20 rounded-lg shadow-[0_0_15px_rgba(59,130,246,0.5)]">
+            <AlertTriangle className="text-blue-400" size={20} />
+          </div>
+          Flood Detection
         </h1>
-        <p className="text-xs text-neutral-400 mt-1 uppercase tracking-widest">ศูนย์ควบคุม (Command Center)</p>
+        <p className="text-[10px] text-blue-300/60 mt-2 uppercase tracking-[0.2em] font-semibold">Command Center</p>
       </div>
-      
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
-        <div className="px-2 py-2 text-xs font-semibold text-neutral-500 uppercase tracking-wider flex justify-between items-center">
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+        <div className="px-1 pb-1 text-xs font-bold text-slate-500 uppercase tracking-widest flex justify-between items-center">
           <span>สถานะกล้อง CCTV</span>
-          {nodes.length === 0 && <Loader size={14} className="animate-spin text-neutral-500" />}
+          {nodes.length === 0 && <Loader size={14} className="animate-spin text-blue-400" />}
         </div>
-        
+
         {nodes.map(node => {
           const statusColors = getStatusColor(node.status);
           const isSelected = selectedNodeId === node.camera_id;
-          
+
           return (
-            <div 
+            <div
               key={node.camera_id}
               onClick={() => onNodeClick(node)}
-              className={`p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
-                isSelected ? 'bg-neutral-800 border-neutral-600 shadow-md' : 'border-neutral-800 hover:border-neutral-700 hover:bg-neutral-800/50'
-              }`}
+              className={`p-4 rounded-xl cursor-pointer ${isSelected ? 'glass-card selected' : 'glass-card'
+                }`}
             >
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex items-center gap-2">
-                  <Video size={16} className={`text-neutral-400 ${node.is_processing ? 'text-blue-400 animate-pulse' : ''}`} />
-                  <span className="font-semibold text-sm">{node.camera_id}</span>
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className={`p-1.5 rounded-md ${node.is_processing ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-400'}`}>
+                    <Video size={14} className={node.is_processing ? 'animate-pulse' : ''} />
+                  </div>
+                  <span className="font-bold text-sm tracking-wide text-slate-200">{node.camera_id}</span>
                 </div>
                 {getStatusIcon(node.status)}
               </div>
-              
-              <div className="text-xs text-neutral-400 mb-2 truncate">
+
+              <div className="text-xs text-slate-400 mb-4 truncate font-medium">
                 {node.name}
               </div>
-              
-              <div className={`mt-2 flex items-center justify-between px-2 py-1.5 rounded text-xs font-medium border ${statusColors}`}>
-                <span className="uppercase">
+
+              <div className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold border ${statusColors} shadow-inner`}>
+                <span className="uppercase tracking-wide flex items-center gap-1.5">
+                  <span className={`w-1.5 h-1.5 rounded-full ${node.status === 'critical' ? 'bg-red-500' : node.status === 'warning' ? 'bg-yellow-500' : 'bg-green-500'}`}></span>
                   {node.status === 'critical' ? 'วิกฤต' : node.status === 'warning' ? 'เฝ้าระวัง' : 'ปกติ'}
                   {node.is_confirmed_critical && ' (ยืนยันแล้ว)'}
                 </span>
-                <span>{node.water_depth.toFixed(1)} cm</span>
+                <span className="font-mono text-sm">{node.water_depth.toFixed(1)} cm</span>
               </div>
             </div>
           );
         })}
       </div>
 
-      <div className="p-4 border-t border-neutral-800 bg-neutral-950">
+      <div className="p-5 border-t border-white/5 bg-slate-900/50 backdrop-blur-md">
         <button
           onClick={handleBroadcastAll}
           disabled={!hasConfirmedFloods || isBroadcasting}
-          className={`w-full py-3 rounded-lg flex items-center justify-center gap-2 font-bold transition-all shadow-lg ${
-            !hasConfirmedFloods 
-              ? 'bg-neutral-800 text-neutral-500 cursor-not-allowed' 
-              : 'bg-green-600 hover:bg-green-500 text-white active:scale-95'
-          }`}
+          className={`w-full py-3.5 rounded-xl flex items-center justify-center gap-2.5 font-bold transition-all shadow-lg text-sm tracking-wide ${!hasConfirmedFloods
+              ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-white/5'
+              : 'bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 text-white active:scale-[0.98] border border-green-400/30 shadow-[0_0_20px_rgba(16,185,129,0.3)]'
+            }`}
         >
-          <Send size={20} className={isBroadcasting ? 'animate-pulse' : ''} />
-          {isBroadcasting ? 'กำลังส่ง...' : `📢 ส่งประกาศ Line (${nodes.filter(n => n.is_confirmed_critical).length} จุด)`}
+          <Send size={18} className={isBroadcasting ? 'animate-pulse' : ''} />
+          {isBroadcasting ? 'กำลังส่งข้อมูล...' : `ส่งประกาศเตือนภัย (${nodes.filter(n => n.is_confirmed_critical).length} จุด)`}
         </button>
       </div>
     </div>
