@@ -37,9 +37,10 @@ export default function Sidebar({ nodes, onNodeClick, selectedNodeId }: SidebarP
     if (!hasConfirmedFloods) return;
     setIsBroadcasting(true);
     try {
-      const baseUrl = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
-        ? 'http://127.0.0.1:8000'
-        : process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000';
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL 
+        || ((typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
+            ? 'http://127.0.0.1:8000'
+            : 'http://127.0.0.1:8000');
 
       // ดึง ID ของกล้องที่กดยืนยันแล้ว
       const confirmedIds = nodes.filter(n => n.is_confirmed_critical).map(n => n.camera_id);
