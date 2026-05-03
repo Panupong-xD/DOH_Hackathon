@@ -14,5 +14,4 @@ export interface CameraState {
   is_processing: boolean;
   // Frontend specific states
   is_confirmed_critical?: boolean;
-  is_rejected?: boolean;
 }

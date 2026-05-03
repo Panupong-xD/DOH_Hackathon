@@ -19,36 +19,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
     }
 
-    // Verify admin status
+    // Verify admin status in Firestore
     const adminDoc = await adminDb.collection('admins').doc(uid).get();
     if (!adminDoc.exists) {
       return NextResponse.json({ error: 'Forbidden: Not an admin' }, { status: 403 });
     }
 
-    // Get camera_id to resolve
     const { camera_id } = await req.json();
     if (!camera_id) {
       return NextResponse.json({ error: 'Missing camera_id' }, { status: 400 });
     }
 
-    // Delete the confirmed flood from Firestore
-    await adminDb.collection('confirmed_floods').doc(camera_id).delete();
-
-    // Also tell Python backend to clear in-memory snapshot
+    // Tell the Python backend to save the current in-memory alert image to disk
     const backendUrl = process.env.BACKEND_API_URL || 'http://127.0.0.1:8000';
-    await fetch(`${backendUrl}/api/resolve`, {
+    const backendRes = await fetch(`${backendUrl}/api/confirm`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ camera_id }),
-    }).catch(err => console.warn('[API/resolve] Backend cleanup error (non-fatal):', err));
-
-    return NextResponse.json({
-      status: 'success',
-      message: `Flood zone ${camera_id} resolved`,
-      resolved_by: uid,
     });
+
+    if (!backendRes.ok) {
+      console.warn(`[API/confirm] Backend image save failed for ${camera_id}:`, await backendRes.text());
+    }
+
+    const result = await backendRes.json();
+    return NextResponse.json({ status: 'success', confirmed_by: uid, ...result });
   } catch (error) {
-    console.error('[API/resolve] Error:', error);
+    console.error('[API/confirm] Error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

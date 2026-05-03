@@ -90,6 +90,45 @@ def send_line_alert(flex_contents: dict, alt_text: str = "แจ้งเตื�
     except Exception as e:
         print(f"[LINE OA] ⚠️ Network Error: {e}")
 
+# ═══════════════════════════════════════════════════════
+# In-memory store for alert images per camera.
+# Updated every AI frame when water >= 30cm.
+# Written to disk ONLY when Admin clicks [Confirm].
+# Key: camera_id, Value: JPEG bytes
+# ═══════════════════════════════════════════════════════
+alert_snapshots: Dict[str, bytes] = {}
+
+
+@app.post("/api/confirm")
+async def confirm_flood(body: dict = Body(...)):
+    """Admin confirmed a flood — save the in-memory alert image to disk now."""
+    camera_id = body.get("camera_id")
+    if not camera_id or camera_id not in camera_states:
+        return {"error": "Invalid camera_id"}
+
+    img_bytes = alert_snapshots.get(camera_id)
+    if img_bytes:
+        filename = f"alert_{camera_id}_{int(time.time())}.jpg"
+        filepath = os.path.join("captures", filename)
+        with open(filepath, "wb") as f:
+            f.write(img_bytes)
+        print(f"[Confirm] ✅ บันทึกภาพ Alert ลงดิสก์: {filename}")
+        return {"status": "success", "camera_id": camera_id, "filename": filename}
+    else:
+        print(f"[Confirm] ⚠️ ไม่พบภาพ Alert ในหน่วยความจำสำหรับ {camera_id}")
+        return {"status": "success", "camera_id": camera_id, "filename": None}
+
+
+@app.post("/api/resolve")
+async def resolve_flood(body: dict = Body(...)):
+    """Admin resolved a flood — clear in-memory snapshot."""
+    camera_id = body.get("camera_id")
+    if camera_id and camera_id in alert_snapshots:
+        del alert_snapshots[camera_id]
+        print(f"[Resolve] ✅ เคลียร์สถานะน้ำท่วมสำหรับ {camera_id}")
+    return {"status": "success", "camera_id": camera_id}
+
+
 @app.post("/api/broadcast_all")
 async def trigger_broadcast_all(confirmed_ids: list[str] = Body(...)):
     # ส่งเฉพาะจุดที่น้ำท่วมเกิน 30cm (วิกฤต) เท่านั้นตามที่กดยืนยันมา
@@ -424,20 +463,19 @@ def ai_processor_thread(camera: dict):
                 "screenshot_base64": f"data:image/jpeg;base64,{b64_img}"
             })
             
-        # (ลบโค้ดแจ้งเตือนอัตโนมัติออกตามที่คุณขอ เพื่อให้กดส่งเองทีเดียวผ่านปุ่ม)
-            
         print(f"[AI] {cam_id} อัปเดตความลึก: {max_depth:.1f} cm | สถานะ: {status}")
-        
-        # ถ่ายภาพเก็บไว้เผื่อเอาไปส่ง Line ตอนกดปุ่ม (บันทึกตลอดถ้ามีระดับน้ำ)
-        if max_depth > 0:
-            filename = f"alert_{cam_id}_{int(time.time())}.jpg"
-            cv2.imwrite(os.path.join("captures", filename), alert_frame)
+
+        # เก็บภาพ Alert ไว้ใน Memory เท่านั้น (ไม่เขียนลง Disk ทุกเฟรม)
+        # จะเขียนลง Disk จริงๆ ก็ต่อเมื่อ Admin กด Confirm ผ่าน /api/confirm
+        if max_depth >= 30:
+            _, img_buffer = cv2.imencode('.jpg', alert_frame)
+            alert_snapshots[cam_id] = img_buffer.tobytes()
         
         # ปรับความถี่การประมวลผลให้ไวขึ้น (0.5 วินาทีต่อครั้ง)
         for _ in range(30 // 2): # ข้าม 0.5 วินาที
             cap.grab()
             
-        time.sleep(10) # พักก่อนสแกนใหม่ แป๊บเดียวพอเพราะการ์ดจอไหว
+        time.sleep(2) # พักก่อนสแกนใหม่ แป๊บเดียวพอเพราะการ์ดจอไหว
 
 @app.on_event("startup")
 def startup_event():
