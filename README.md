@@ -27,6 +27,13 @@ An intelligent flood surveillance and analysis system powered by Zero-Shot AI (G
 - **Rich Media Alerts**: Disseminates professional **LINE Flex Message Carousels** containing live site captures, precise water level data, and direct map links.
 - **Emergency Broadcast**: One-click rapid dissemination to all subscribers during emergency events.
 
+### 4. Secure Authentication & RBAC
+- **Firebase Integration**: Secure login system via Firebase Authentication (Email/Password & Google Login).
+- **Role-Based Access Control**: 
+  - **Admin**: Full control to Confirm/Reject alerts, Resolve flood zones, and Broadcast to LINE.
+  - **Public/Guest**: Read-only access to view live feeds, confirmed flood zones, and use smart routing.
+- **Real-time State Sync**: Flood confirmations are synced globally via Firestore, ensuring all users see the same map status regardless of page refreshes.
+
 ---
 
 ## How It Works (AI Logic)
@@ -75,7 +82,24 @@ PUBLIC_BASE_URL=your_public_url (e.g., via Cloudflare Tunnel)
 
 Create a `smart-flood-dashboard/.env.local` file:
 ```env
+# Google Maps
 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+
+# Firebase Client (Frontend)
+NEXT_PUBLIC_FIREBASE_API_KEY=...
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=...
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=...
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
+NEXT_PUBLIC_FIREBASE_APP_ID=...
+
+# Firebase Admin (Backend/API) - Service Account
+FIREBASE_ADMIN_PROJECT_ID=...
+FIREBASE_ADMIN_CLIENT_EMAIL=...
+FIREBASE_ADMIN_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+
+# Backend URL
+BACKEND_API_URL=http://localhost:8000
 ```
 
 ### 3. Backend Installation
@@ -94,6 +118,25 @@ npm install
 npm run dev
 ```
 The dashboard will be available at [http://localhost:3000](http://localhost:3000).
+
+### 5. Setting up Admin Status
+To grant a user **Admin** privileges:
+1. Register a user via the application UI.
+2. Open **Firebase Console** -> **Firestore Database**.
+3. Create a collection named `admins`.
+4. Create a document with the **User's UID** as the Document ID.
+5. (Optional) Add fields like `email` or `name` for reference.
+
+---
+
+## Alert State Machine
+
+| Status | Trigger | Action |
+| :--- | :--- | :--- |
+| **Normal** | Water < 30cm | Continuous AI monitoring. |
+| **Pending Alert** | Water ≥ 30cm | **(Admin Only)** Alert popup appears with live capture. |
+| **Confirmed Danger** | Admin clicks **Confirm** | Red 5km circle appears on map for **ALL** users. Image is saved to disk. |
+| **Resolved** | Admin clicks **Resolve** | Red circle vanishes. Alert is re-armed for next flood event. |
 
 ---
 
