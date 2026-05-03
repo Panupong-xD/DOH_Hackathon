@@ -51,9 +51,11 @@ interface MapProps {
   nodes: CameraState[];
   selectedNodeId: string | null;
   onNodeSelect: (node: CameraState | null) => void;
+  isAdmin?: boolean;
+  onResolve?: (nodeId: string) => void;
 }
 
-export default function Map({ nodes, selectedNodeId, onNodeSelect }: MapProps) {
+export default function Map({ nodes, selectedNodeId, onNodeSelect, isAdmin, onResolve }: MapProps) {
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "", 

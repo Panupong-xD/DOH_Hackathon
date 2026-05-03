@@ -5,14 +5,35 @@ import Sidebar from '@/components/Sidebar';
 import Map from '@/components/Map';
 import Alert from '@/components/Alert';
 import { CameraState } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
+import { collection, onSnapshot, doc, setDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 export default function Dashboard() {
+  const { user, isAdmin, getIdToken } = useAuth();
   const [nodes, setNodes] = useState<CameraState[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
-  // Frontend state for confirmed/rejected
+  // Firestore-backed confirmed floods (real-time sync)
   const [confirmedNodes, setConfirmedNodes] = useState<Set<string>>(new Set());
+  // Local-only rejected state (session-specific)
   const [rejectedNodes, setRejectedNodes] = useState<Set<string>>(new Set());
+
+  // Listen to Firestore confirmed_floods collection in real-time
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      collection(db, 'confirmed_floods'),
+      (snapshot) => {
+        const confirmed = new Set<string>();
+        snapshot.forEach(docSnap => confirmed.add(docSnap.id));
+        setConfirmedNodes(confirmed);
+      },
+      (error) => {
+        console.error('Firestore listener error:', error);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
 
   // Fetch data from FastAPI Backend
   useEffect(() => {
@@ -45,18 +66,27 @@ export default function Dashboard() {
   }, [confirmedNodes, rejectedNodes]);
 
   // แจ้งเตือนเฉพาะจุดที่วิกฤตจริงๆ (30cm ขึ้นไป) และยังไม่ได้จัดการ
-  const pendingAlertNode = nodes.find(
-    n => n.water_depth >= 30 &&
-      !n.is_confirmed_critical &&
-      !n.is_rejected
-  );
+  // Only show alert popup to admins
+  const pendingAlertNode = isAdmin
+    ? nodes.find(
+        n => n.water_depth >= 30 &&
+          !n.is_confirmed_critical &&
+          !n.is_rejected
+      )
+    : undefined;
 
-  const handleConfirm = (nodeId: string) => {
-    setConfirmedNodes(prev => {
-      const newSet = new Set(prev);
-      newSet.add(nodeId);
-      return newSet;
-    });
+  const handleConfirm = async (nodeId: string) => {
+    if (!isAdmin || !user) return;
+    try {
+      // Write to Firestore - onSnapshot will update confirmedNodes automatically
+      await setDoc(doc(db, 'confirmed_floods', nodeId), {
+        camera_id: nodeId,
+        confirmed_at: serverTimestamp(),
+        confirmed_by: user.uid,
+      });
+    } catch (err) {
+      console.error('Error confirming flood:', err);
+    }
   };
 
   const handleReject = (nodeId: string) => {
@@ -65,6 +95,30 @@ export default function Dashboard() {
       newSet.add(nodeId);
       return newSet;
     });
+  };
+
+  const handleResolve = async (nodeId: string) => {
+    if (!isAdmin) return;
+    try {
+      const token = await getIdToken();
+      if (!token) return;
+
+      const res = await fetch('/api/resolve', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ camera_id: nodeId }),
+      });
+
+      if (!res.ok) {
+        console.error('Resolve failed:', await res.text());
+      }
+      // Firestore onSnapshot will automatically update the UI
+    } catch (err) {
+      console.error('Error resolving flood:', err);
+    }
   };
 
   const handleNodeSelect = (node: CameraState | null) => {
@@ -85,6 +139,9 @@ export default function Dashboard() {
         nodes={nodes}
         onNodeClick={handleNodeSelect}
         selectedNodeId={selectedNodeId}
+        isAdmin={isAdmin}
+        onResolve={handleResolve}
+        getIdToken={getIdToken}
       />
 
       <div className="flex-1 relative">
@@ -92,6 +149,8 @@ export default function Dashboard() {
           nodes={nodes}
           selectedNodeId={selectedNodeId}
           onNodeSelect={handleNodeSelect}
+          isAdmin={isAdmin}
+          onResolve={handleResolve}
         />
       </div>
     </main>

@@ -1,17 +1,25 @@
 "use client";
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { CameraState } from '@/types';
-import { Video, AlertTriangle, CheckCircle, Info, Loader, Send } from 'lucide-react';
+import { Video, AlertTriangle, CheckCircle, Info, Loader, Send, Shield, LogIn, LogOut, XCircle } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface SidebarProps {
   nodes: CameraState[];
   onNodeClick: (node: CameraState) => void;
   selectedNodeId: string | null;
+  isAdmin: boolean;
+  onResolve: (nodeId: string) => void;
+  getIdToken: () => Promise<string | null>;
 }
 
-export default function Sidebar({ nodes, onNodeClick, selectedNodeId }: SidebarProps) {
+export default function Sidebar({ nodes, onNodeClick, selectedNodeId, isAdmin, onResolve, getIdToken }: SidebarProps) {
+  const { user, logout } = useAuth();
+  const router = useRouter();
   const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -34,20 +42,25 @@ export default function Sidebar({ nodes, onNodeClick, selectedNodeId }: SidebarP
   const hasConfirmedFloods = nodes.some(n => n.is_confirmed_critical);
 
   const handleBroadcastAll = async () => {
-    if (!hasConfirmedFloods) return;
+    if (!hasConfirmedFloods || !isAdmin) return;
     setIsBroadcasting(true);
     try {
-      const baseUrl = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
-        ? 'http://127.0.0.1:8000'
-        : process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000';
+      const token = await getIdToken();
+      if (!token) {
+        alert('กรุณาล็อกอินใหม่');
+        setIsBroadcasting(false);
+        return;
+      }
 
-      // ดึง ID ของกล้องที่กดยืนยันแล้ว
       const confirmedIds = nodes.filter(n => n.is_confirmed_critical).map(n => n.camera_id);
 
-      const res = await fetch(`${baseUrl}/api/broadcast_all`, {
+      const res = await fetch('/api/broadcast', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(confirmedIds)
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ confirmedIds }),
       }).catch(() => null);
 
       if (res && res.ok) {
@@ -55,22 +68,60 @@ export default function Sidebar({ nodes, onNodeClick, selectedNodeId }: SidebarP
       } else {
         alert('เกิดข้อผิดพลาดในการส่ง แจ้งเตือน');
       }
-    } catch (e) {
+    } catch {
       alert('ไม่สามารถเชื่อมต่อ Server ได้');
     }
     setIsBroadcasting(false);
   };
 
+  const handleResolve = async (nodeId: string) => {
+    setResolvingId(nodeId);
+    await onResolve(nodeId);
+    setResolvingId(null);
+  };
+
   return (
     <div className="w-80 h-full glass-panel flex flex-col text-slate-200 shadow-2xl z-10 border-r border-white/5">
       <div className="p-6 border-b border-white/5 bg-gradient-to-b from-blue-500/10 to-transparent">
-        <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-3">
-          <div className="p-2 bg-blue-500/20 rounded-lg shadow-[0_0_15px_rgba(59,130,246,0.5)]">
-            <AlertTriangle className="text-blue-400" size={20} />
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-3">
+              <div className="p-2 bg-blue-500/20 rounded-lg shadow-[0_0_15px_rgba(59,130,246,0.5)]">
+                <AlertTriangle className="text-blue-400" size={20} />
+              </div>
+              Flood Detection
+            </h1>
+            <p className="text-[10px] text-blue-300/60 mt-2 uppercase tracking-[0.2em] font-semibold">Command Center</p>
           </div>
-          Flood Detection
-        </h1>
-        <p className="text-[10px] text-blue-300/60 mt-2 uppercase tracking-[0.2em] font-semibold">Command Center</p>
+
+          {/* Auth Button */}
+          <div className="flex flex-col items-end gap-1">
+            {user ? (
+              <>
+                {isAdmin && (
+                  <span className="text-[9px] bg-emerald-500/15 text-emerald-400 px-2 py-0.5 rounded-md border border-emerald-500/30 flex items-center gap-1 font-bold uppercase tracking-wider">
+                    <Shield size={10} /> Admin
+                  </span>
+                )}
+                <button
+                  onClick={logout}
+                  className="text-[10px] text-slate-500 hover:text-red-400 transition-colors flex items-center gap-1 mt-1"
+                  title="ออกจากระบบ"
+                >
+                  <LogOut size={12} /> ออกจากระบบ
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => router.push('/login')}
+                className="text-[10px] text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1 bg-blue-500/10 px-2.5 py-1.5 rounded-lg border border-blue-500/20 hover:border-blue-500/40"
+                title="เข้าสู่ระบบ Admin"
+              >
+                <LogIn size={12} /> Admin Login
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
@@ -112,24 +163,45 @@ export default function Sidebar({ nodes, onNodeClick, selectedNodeId }: SidebarP
                 </span>
                 <span className="font-mono text-sm">{node.water_depth.toFixed(1)} cm</span>
               </div>
+
+              {/* Admin-only: Resolve button for confirmed floods */}
+              {isAdmin && node.is_confirmed_critical && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleResolve(node.camera_id);
+                  }}
+                  disabled={resolvingId === node.camera_id}
+                  className="mt-3 w-full py-2 rounded-lg flex items-center justify-center gap-2 text-xs font-bold bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/30 transition-all active:scale-[0.98] disabled:opacity-50"
+                >
+                  {resolvingId === node.camera_id ? (
+                    <><Loader size={14} className="animate-spin" /> กำลังดำเนินการ...</>
+                  ) : (
+                    <><XCircle size={14} /> เคลียร์สถานะน้ำท่วม (Resolve)</>
+                  )}
+                </button>
+              )}
             </div>
           );
         })}
       </div>
 
-      <div className="p-5 border-t border-white/5 bg-slate-900/50 backdrop-blur-md">
-        <button
-          onClick={handleBroadcastAll}
-          disabled={!hasConfirmedFloods || isBroadcasting}
-          className={`w-full py-3.5 rounded-xl flex items-center justify-center gap-2.5 font-bold transition-all shadow-lg text-sm tracking-wide ${!hasConfirmedFloods
-              ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-white/5'
-              : 'bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 text-white active:scale-[0.98] border border-green-400/30 shadow-[0_0_20px_rgba(16,185,129,0.3)]'
-            }`}
-        >
-          <Send size={18} className={isBroadcasting ? 'animate-pulse' : ''} />
-          {isBroadcasting ? 'กำลังส่งข้อมูล...' : `ส่งประกาศเตือนภัย (${nodes.filter(n => n.is_confirmed_critical).length} จุด)`}
-        </button>
-      </div>
+      {/* Admin-only: Broadcast button */}
+      {isAdmin && (
+        <div className="p-5 border-t border-white/5 bg-slate-900/50 backdrop-blur-md">
+          <button
+            onClick={handleBroadcastAll}
+            disabled={!hasConfirmedFloods || isBroadcasting}
+            className={`w-full py-3.5 rounded-xl flex items-center justify-center gap-2.5 font-bold transition-all shadow-lg text-sm tracking-wide ${!hasConfirmedFloods
+                ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-white/5'
+                : 'bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 text-white active:scale-[0.98] border border-green-400/30 shadow-[0_0_20px_rgba(16,185,129,0.3)]'
+              }`}
+          >
+            <Send size={18} className={isBroadcasting ? 'animate-pulse' : ''} />
+            {isBroadcasting ? 'กำลังส่งข้อมูล...' : `ส่งประกาศเตือนภัย (${nodes.filter(n => n.is_confirmed_critical).length} จุด)`}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
