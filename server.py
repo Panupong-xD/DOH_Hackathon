@@ -108,12 +108,18 @@ async def confirm_flood(body: dict = Body(...)):
 
     img_bytes = alert_snapshots.get(camera_id)
     if img_bytes:
-        filename = f"alert_{camera_id}_{int(time.time())}.jpg"
+        # ดึงระดับน้ำปัจจุบันมา Lock ไว้
+        confirmed_depth = camera_states[camera_id].get("water_depth", 0.0)
+        
+        # ตั้งชื่อไฟล์โดยฝังระดับน้ำลงไปเลย (Clean & Proper)
+        filename = f"alert_{camera_id}_{int(time.time())}_depth_{confirmed_depth:.1f}.jpg"
         filepath = os.path.join("captures", filename)
+        
         with open(filepath, "wb") as f:
             f.write(img_bytes)
-        print(f"[Confirm] ✅ บันทึกภาพ Alert ลงดิสก์: {filename}")
-        return {"status": "success", "camera_id": camera_id, "filename": filename}
+            
+        print(f"[Confirm] ✅ บันทึกภาพและระดับน้ำ ({confirmed_depth}cm): {filename}")
+        return {"status": "success", "camera_id": camera_id, "filename": filename, "depth": confirmed_depth}
     else:
         print(f"[Confirm] ⚠️ ไม่พบภาพ Alert ในหน่วยความจำสำหรับ {camera_id}")
         return {"status": "success", "camera_id": camera_id, "filename": None}
@@ -131,20 +137,29 @@ async def resolve_flood(body: dict = Body(...)):
 
 @app.post("/api/broadcast_all")
 async def trigger_broadcast_all(confirmed_ids: list[str] = Body(...)):
-    # ส่งเฉพาะจุดที่น้ำท่วมเกิน 30cm (วิกฤต) เท่านั้นตามที่กดยืนยันมา
-    flooded_nodes = [camera_states[cid] for cid in confirmed_ids if cid in camera_states and camera_states[cid]["water_depth"] >= 30]
+    # ส่งทุกจุดที่ Admin กดยืนยันมา (Confirmed) โดยดึงข้อมูลจาก Snapshot ที่บันทึกไว้
+    flooded_nodes = [camera_states[cid] for cid in confirmed_ids if cid in camera_states]
     
     if not flooded_nodes:
-        return {"error": "ยังไม่มีรายงานน้ำท่วมในจุดที่คุณยืนยัน"}
+        return {"error": "ไม่พบข้อมูลกล้องที่คุณเลือก"}
         
     bubbles = []
     
     for node in flooded_nodes:
-        # ดึงภาพประกอบของแต่ละจุด
+        # ดึงภาพล่าสุดและแกะระดับน้ำที่ Lock ไว้จากชื่อไฟล์
         node_img_filename = None
-        files = [f for f in os.listdir("captures") if f.startswith(f"alert_{node['camera_id']}")]
+        display_depth = node['water_depth'] # Fallback
+        
+        # ค้นหาไฟล์ภาพที่มีชื่อ pattern _depth_
+        files = [f for f in os.listdir("captures") if f.startswith(f"alert_{node['camera_id']}") and "_depth_" in f]
         if files:
             node_img_filename = sorted(files)[-1]
+            try:
+                # แกะระดับน้ำจากชื่อไฟล์ (เช่น alert_CCTV-01_..._depth_35.5.jpg)
+                depth_str = node_img_filename.split("_depth_")[-1].replace(".jpg", "")
+                display_depth = float(depth_str)
+            except:
+                pass
         
         if node_img_filename:
             node_img_url = f"{PUBLIC_BASE_URL}/captures/{node_img_filename}"
@@ -158,7 +173,7 @@ async def trigger_broadcast_all(confirmed_ids: list[str] = Body(...)):
                 "type": "box",
                 "layout": "vertical",
                 "contents": [
-                    {"type": "text", "text": f"🚨 วิกฤต: {node['name']}", "weight": "bold", "color": "#ffffff", "size": "md"}
+                    {"type": "text", "text": f"🚨 รายงานน้ำท่วม: {node['name']}", "weight": "bold", "color": "#ffffff", "size": "md"}
                 ],
                 "backgroundColor": "#b91c1c"
             },
@@ -178,8 +193,8 @@ async def trigger_broadcast_all(confirmed_ids: list[str] = Body(...)):
                         "type": "box",
                         "layout": "horizontal",
                         "contents": [
-                            {"type": "text", "text": "ระดับน้ำปัจจุบัน", "size": "sm", "color": "#64748b", "flex": 3},
-                            {"type": "text", "text": f"{node['water_depth']:.1f} cm", "size": "xl", "align": "end", "weight": "bold", "color": "#e11d48", "flex": 3}
+                            {"type": "text", "text": "ระดับน้ำขณะตรวจสอบ", "size": "sm", "color": "#64748b", "flex": 3},
+                            {"type": "text", "text": f"{display_depth:.1f} cm", "size": "xl", "align": "end", "weight": "bold", "color": "#e11d48", "flex": 3}
                         ]
                     },
                     {"type": "separator", "margin": "md"},
