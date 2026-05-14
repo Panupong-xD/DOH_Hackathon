@@ -244,7 +244,7 @@ app.add_middleware(
 
 MOCK_CAMERAS = [
     {"camera_id": "CCTV-01", "name": "ถนนรัชดาภิเษก", "location": {"lat": 13.7934, "lng": 100.5741}, "video": "Dataset/sample1.mp4"},
-    {"camera_id": "CCTV-02", "name": "แยกลาดพร้าว", "location": {"lat": 13.8062, "lng": 100.5615}, "video": "Dataset/sample2.mp4"},
+    {"camera_id": "CCTV-02", "name": "แยกลาดพร้าว", "location": {"lat": 14.110825, "lng": 100.978917}, "video": "Dataset/sample2.mp4"},
     {"camera_id": "CCTV-03", "name": "สุขุมวิท 71", "location": {"lat": 13.7226, "lng": 100.5960}, "video": "Dataset/sample3.mp4"},
 ]
 
@@ -490,7 +490,7 @@ def ai_processor_thread(camera: dict):
         for _ in range(30 // 2): # ข้าม 0.5 วินาที
             cap.grab()
             
-        time.sleep(2) # พักก่อนสแกนใหม่ แป๊บเดียวพอเพราะการ์ดจอไหว
+        time.sleep(10) # พักก่อนสแกนใหม่ แป๊บเดียวพอเพราะการ์ดจอไหว
 
 @app.on_event("startup")
 def startup_event():
